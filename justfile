@@ -8,9 +8,9 @@ cf *args:
 build:
     cargo build --manifest-path cf/Cargo.toml --release
 
-# Generate a new solution
-gen name lang="py" *args:
-    just cf gen {{name}} -l {{lang}} {{args}}
+# Create a new solution
+new name lang="py" *args:
+    just cf new {{name}} -l {{lang}} {{args}}
 
 # Create sample I/O files (opens browser)
 eg name count="1":
@@ -28,14 +28,10 @@ test name lang="py" *args:
 login:
     just cf login
 
-# Pull submissions from CF
-pull *args:
-    just cf pull {{args}}
+# Watch your submissions
+watch *args:
+    just cf watch {{args}}
 
 # Submit solution (opens browser)
 submit name:
     just cf submit {{name}}
-
-# Watch submission status
-watch:
-    just cf watch

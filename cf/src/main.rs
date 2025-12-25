@@ -27,8 +27,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Generate a new solution file from template
-    Gen {
+    /// Create a new solution file from template
+    New {
         /// Problem name (e.g., 1900A -> A-set/, leetcode -> Others/)
         name: String,
         /// Language: py, cpp, hs (default: py)
@@ -63,8 +63,8 @@ enum Commands {
     },
     /// Login to Codeforces
     Login,
-    /// Pull your submissions from Codeforces
-    Pull {
+    /// Watch your submissions on Codeforces
+    Watch {
         /// Problem name (e.g., 1900A) or contest ID (e.g., 1900)
         name: Option<String>,
         /// Only accepted submissions
@@ -75,12 +75,6 @@ enum Commands {
     Submit {
         /// Problem name (e.g., 1900A)
         name: String,
-    },
-    /// Watch submission status
-    Watch {
-        /// Submission ID (optional, uses latest if not provided)
-        #[arg(short, long)]
-        id: Option<String>,
     },
 }
 
@@ -562,7 +556,7 @@ fn login() {
     }
 }
 
-fn pull(name: Option<String>, ac_only: bool) {
+fn watch(name: Option<String>, ac_only: bool) {
     let config = load_config();
     let handle = match config.handle {
         Some(h) => h,
@@ -692,88 +686,11 @@ fn submit(name: &str) {
     let _ = Command::new("cmd").args(["/C", "start", &url]).spawn();
 }
 
-fn watch(id: Option<String>) {
-    let config = load_config();
-    let handle = match config.handle {
-        Some(h) => h,
-        None => {
-            eprintln!("Not logged in. Run: cf login");
-            return;
-        }
-    };
-
-    println!("Fetching latest submissions for {}...\n", handle);
-
-    let url = format!(
-        "https://codeforces.com/api/user.status?handle={}&from=1&count=10",
-        handle
-    );
-    let client = reqwest::blocking::Client::new();
-
-    let resp = match client.get(&url).send() {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("Failed to fetch: {}", e);
-            return;
-        }
-    };
-
-    let text = resp.text().unwrap_or_default();
-    let json: serde_json::Value = match serde_json::from_str(&text) {
-        Ok(j) => j,
-        Err(_) => {
-            eprintln!("Failed to parse response");
-            return;
-        }
-    };
-
-    if json["status"] != "OK" {
-        eprintln!("API error");
-        return;
-    }
-
-    let submissions = match json["result"].as_array() {
-        Some(s) => s,
-        None => return,
-    };
-
-    // If specific ID provided, filter to that
-    for sub in submissions {
-        let sub_id = sub["id"].as_u64().unwrap_or(0);
-        if let Some(ref filter_id) = id {
-            if sub_id.to_string() != *filter_id {
-                continue;
-            }
-        }
-
-        let contest_id = sub["contestId"].as_u64().unwrap_or(0);
-        let problem_idx = sub["problem"]["index"].as_str().unwrap_or("");
-        let verdict = sub["verdict"].as_str().unwrap_or("TESTING");
-        let time_ms = sub["timeConsumedMillis"].as_u64().unwrap_or(0);
-        let memory_kb = sub["memoryConsumedBytes"].as_u64().unwrap_or(0) / 1024;
-
-        let status = match verdict {
-            "OK" => "✓ Accepted".to_string(),
-            "TESTING" => "⏳ Testing...".to_string(),
-            "WRONG_ANSWER" => format!("✗ Wrong Answer"),
-            "TIME_LIMIT_EXCEEDED" => "✗ TLE".to_string(),
-            "MEMORY_LIMIT_EXCEEDED" => "✗ MLE".to_string(),
-            "COMPILATION_ERROR" => "✗ CE".to_string(),
-            _ => verdict.to_string(),
-        };
-
-        println!(
-            "{}{} | {} | {}ms | {}KB",
-            contest_id, problem_idx, status, time_ms, memory_kb
-        );
-    }
-}
-
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Gen {
+        Commands::New {
             name,
             lang,
             single,
@@ -783,9 +700,8 @@ fn main() {
         Commands::Eg { name, count } => create_samples(&name, count),
         Commands::Test { name, num, lang } => test_solution(&name, num, &lang),
         Commands::Login => login(),
-        Commands::Pull { name, ac } => pull(name, ac),
+        Commands::Watch { name, ac } => watch(name, ac),
         Commands::Submit { name } => submit(&name),
-        Commands::Watch { id } => watch(id),
     }
 }
 
