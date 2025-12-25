@@ -5,12 +5,13 @@ A repository storing my solutions to competitive programming problems on Codefor
 ## Usage
 
 ```bash
-# Using justfile (no install needed)
+# Using just (task runner)
 just gen 1900A           # Python (default)
-just gen 1900A -l cpp    # C++
+just gen 1900A cpp       # C++
 
 just eg 1900A            # Create sample I/O files
-just test 1900A          # Test solution against samples
+just test 1900A          # Test solution (Python default)
+just test 1900A cpp      # Test C++ solution
 
 just login               # Save your handle
 just pull                # View your recent submissions
@@ -25,8 +26,8 @@ just list                # List templates and solution counts
 
 ```bash
 just gen 1900A           # Generate solution file
-just eg 1900A         # Create sample files
-# Copy I/O from to samples/1900A/in1.txt and ans1.txt
+just eg 1900A            # Create sample files (opens browser)
+# Copy samples into samples/1900A/in1.txt and ans1.txt
 just test 1900A          # Run tests
 just submit 1900A        # Open browser to submit
 just watch               # Check status
@@ -62,3 +63,11 @@ samples/
 ```bash
 just build    # Build release binary
 ```
+
+## Requirements
+
+- `just` (task runner)
+- Rust toolchain (`cargo`) for the CLI
+- `python3` for Python solutions
+- `g++` for C++ solutions
+- `runhaskell` for Haskell solutions

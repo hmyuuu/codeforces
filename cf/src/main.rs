@@ -1,9 +1,9 @@
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
-use std::process::{Command, Stdio};
 use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 #[derive(Serialize, Deserialize, Default)]
 struct Config {
@@ -14,10 +14,12 @@ struct Config {
 #[derive(Parser)]
 #[command(name = "cf")]
 #[command(about = "Codeforces solution template generator")]
-#[command(long_about = "Generate solution files from templates for competitive programming.\n\n\
+#[command(
+    long_about = "Generate solution files from templates for competitive programming.\n\n\
     Files are organized into:\n  \
     - solutions/{A,B,C,...}-set/ for Codeforces problems (e.g., 1900A)\n  \
-    - solutions/Others/ for non-CF problems")]
+    - solutions/Others/ for non-CF problems"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -55,6 +57,9 @@ enum Commands {
         name: String,
         /// Specific test number (omit to run all)
         num: Option<usize>,
+        /// Language: py, cpp, hs (default: py)
+        #[arg(short, long, default_value = "py")]
+        lang: String,
     },
     /// Login to Codeforces
     Login,
@@ -80,9 +85,25 @@ enum Commands {
 }
 
 fn get_template_dir() -> std::path::PathBuf {
-    let exe_path = std::env::current_exe().unwrap();
-    exe_path.parent().unwrap().parent().unwrap().parent().unwrap()
-        .join("templates")
+    let from_exe = std::env::current_exe().ok().and_then(|mut path| {
+        for _ in 0..3 {
+            path = path.parent()?.to_path_buf();
+        }
+        Some(path.join("templates"))
+    });
+
+    if let Some(dir) = from_exe {
+        if dir.is_dir() {
+            return dir;
+        }
+    }
+
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let candidates = [cwd.join("cf").join("templates"), cwd.join("templates")];
+    candidates
+        .into_iter()
+        .find(|p| p.is_dir())
+        .unwrap_or_else(|| PathBuf::from("templates"))
 }
 
 fn get_config_path() -> std::path::PathBuf {
@@ -169,19 +190,19 @@ fn generate(name: &str, lang: &str, single: bool, fast: bool) {
     };
 
     // Select template variant (only for Python)
-    let template_name = if ext == "py" {
+    let template_file: String = if ext == "py" {
         if fast {
-            "template_fast.py"
+            "template_fast.py".to_string()
         } else if single {
-            "template_single.py"
+            "template_single.py".to_string()
         } else {
-            "template.py"
+            "template.py".to_string()
         }
     } else {
-        &format!("template.{}", ext)
+        format!("template.{}", ext)
     };
 
-    let template_path = get_template_dir().join(template_name);
+    let template_path = get_template_dir().join(&template_file);
 
     // Extract problem letter (e.g., "1900A" -> "A") or use "Others"
     let dir_name = match extract_problem_letter(name) {
@@ -221,7 +242,10 @@ fn count_solutions() -> std::collections::BTreeMap<String, usize> {
             if entry.path().is_dir() {
                 let dir_name = entry.file_name().to_string_lossy().to_string();
                 let file_count = fs::read_dir(entry.path())
-                    .map(|e| e.filter(|f| f.as_ref().map(|f| f.path().is_file()).unwrap_or(false)).count())
+                    .map(|e| {
+                        e.filter(|f| f.as_ref().map(|f| f.path().is_file()).unwrap_or(false))
+                            .count()
+                    })
                     .unwrap_or(0);
                 if file_count > 0 {
                     counts.insert(dir_name, file_count);
@@ -300,12 +324,28 @@ fn create_samples(name: &str, count: usize) {
     let _ = Command::new("cmd").args(["/C", "start", &url]).spawn();
 }
 
-fn find_solution_file(name: &str) -> Option<std::path::PathBuf> {
+fn find_solution_file(name: &str, lang: &str) -> Option<std::path::PathBuf> {
+    let ext = match lang {
+        "py" | "python" => "py",
+        "cpp" | "c++" => "cpp",
+        "hs" | "haskell" => "hs",
+        _ => "py", // default to py
+    };
+
     let letter = extract_problem_letter(name)?.to_ascii_uppercase();
     let dir = Path::new("solutions").join(format!("{}-set", letter));
 
-    for ext in &["py", "cpp", "hs"] {
-        let path = dir.join(format!("{}.{}", name, ext));
+    let path = dir.join(format!("{}.{}", name, ext));
+    if path.exists() {
+        return Some(path);
+    }
+
+    // Fallback: try other extensions
+    for fallback_ext in &["py", "cpp", "hs"] {
+        if *fallback_ext == ext {
+            continue;
+        }
+        let path = dir.join(format!("{}.{}", name, fallback_ext));
         if path.exists() {
             return Some(path);
         }
@@ -313,8 +353,8 @@ fn find_solution_file(name: &str) -> Option<std::path::PathBuf> {
     None
 }
 
-fn test_solution(name: &str, num: Option<usize>) {
-    let solution = match find_solution_file(name) {
+fn test_solution(name: &str, num: Option<usize>, lang: &str) {
+    let solution = match find_solution_file(name, lang) {
         Some(p) => p,
         None => {
             eprintln!("No solution file found for {}", name);
@@ -330,6 +370,18 @@ fn test_solution(name: &str, num: Option<usize>) {
 
     let ext = solution.extension().and_then(|s| s.to_str()).unwrap_or("");
     println!("Testing: {}", solution.display());
+
+    let cpp_exe = if ext == "cpp" {
+        match compile_cpp(&solution) {
+            Ok(exe) => Some(exe),
+            Err(err) => {
+                eprintln!("Compilation failed:\n{}", err.trim_end());
+                return;
+            }
+        }
+    } else {
+        None
+    };
 
     let mut passed = 0;
     let mut failed = 0;
@@ -361,13 +413,17 @@ fn test_solution(name: &str, num: Option<usize>) {
             eprintln!("Test {}: in{}.txt not found", test_num, test_num);
             continue;
         }
+        if !ans_path.exists() {
+            eprintln!("Test {}: ans{}.txt not found", test_num, test_num);
+            continue;
+        }
 
         let expected = fs::read_to_string(&ans_path)
             .unwrap_or_default()
             .trim()
             .to_string();
 
-        let output = run_solution(&solution, ext, &in_path);
+        let output = run_solution(&solution, ext, &in_path, cpp_exe.as_deref());
 
         let actual = output.trim().to_string();
         if actual == expected {
@@ -381,10 +437,41 @@ fn test_solution(name: &str, num: Option<usize>) {
         }
     }
 
+    // Clean up compiled executable
+    if let Some(exe) = cpp_exe {
+        let _ = fs::remove_file(&exe);
+    }
+
     println!("\nResults: {} passed, {} failed", passed, failed);
 }
 
-fn run_solution(path: &Path, ext: &str, input_path: &Path) -> String {
+fn compile_cpp(source: &Path) -> Result<PathBuf, String> {
+    let exe = if std::env::consts::EXE_EXTENSION.is_empty() {
+        source.with_extension("")
+    } else {
+        source.with_extension(std::env::consts::EXE_EXTENSION)
+    };
+
+    let output = Command::new("g++")
+        .args(["-std=gnu++23", "-O2", "-pipe", "-o"])
+        .arg(&exe)
+        .arg(source)
+        .output()
+        .map_err(|e| format!("Failed to run g++: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(if stderr.trim().is_empty() {
+            "g++ failed (no stderr captured)".to_string()
+        } else {
+            stderr
+        });
+    }
+
+    Ok(exe)
+}
+
+fn run_solution(path: &Path, ext: &str, input_path: &Path, cpp_exe: Option<&Path>) -> String {
     let input = fs::read_to_string(input_path).unwrap_or_default();
 
     let output = match ext {
@@ -402,19 +489,11 @@ fn run_solution(path: &Path, ext: &str, input_path: &Path) -> String {
                 child.wait_with_output()
             }),
         "cpp" => {
-            let exe = path.with_extension("");
-            // Compile first
-            let compile = Command::new("g++")
-                .args(["-O2", "-o"])
-                .arg(&exe)
-                .arg(path)
-                .output();
-
-            if compile.is_err() || !compile.as_ref().unwrap().status.success() {
-                return "Compilation failed".to_string();
-            }
-
-            Command::new(&exe)
+            let exe = match cpp_exe {
+                Some(p) => p,
+                None => return "Missing compiled executable".to_string(),
+            };
+            Command::new(exe)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -427,21 +506,19 @@ fn run_solution(path: &Path, ext: &str, input_path: &Path) -> String {
                     child.wait_with_output()
                 })
         }
-        "hs" => {
-            Command::new("runhaskell")
-                .arg(path)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .and_then(|mut child| {
-                    use std::io::Write;
-                    if let Some(stdin) = child.stdin.as_mut() {
-                        let _ = stdin.write_all(input.as_bytes());
-                    }
-                    child.wait_with_output()
-                })
-        }
+        "hs" => Command::new("runhaskell")
+            .arg(path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                use std::io::Write;
+                if let Some(stdin) = child.stdin.as_mut() {
+                    let _ = stdin.write_all(input.as_bytes());
+                }
+                child.wait_with_output()
+            }),
         _ => return "Unknown language".to_string(),
     };
 
@@ -547,8 +624,13 @@ fn pull(name: Option<String>, ac_only: bool) {
 
         // Filter by name if provided
         if let Some(ref filter) = name {
-            let matches = problem_name.to_lowercase().starts_with(&filter.to_lowercase())
-                || filter.parse::<u64>().map(|id| contest_id == id).unwrap_or(false);
+            let matches = problem_name
+                .to_lowercase()
+                .starts_with(&filter.to_lowercase())
+                || filter
+                    .parse::<u64>()
+                    .map(|id| contest_id == id)
+                    .unwrap_or(false);
             if !matches {
                 continue;
             }
@@ -572,7 +654,7 @@ fn pull(name: Option<String>, ac_only: bool) {
 }
 
 fn submit(name: &str) {
-    let solution = match find_solution_file(name) {
+    let solution = match find_solution_file(name, "py") {
         Some(p) => p,
         None => {
             eprintln!("No solution file found for {}", name);
@@ -588,7 +670,10 @@ fn submit(name: &str) {
         }
     };
 
-    let ext = solution.extension().and_then(|s| s.to_str()).unwrap_or("py");
+    let ext = solution
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("py");
     let url = format!(
         "https://codeforces.com/contest/{}/submit/{}",
         contest_id, problem_letter
@@ -688,10 +773,15 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Gen { name, lang, single, fast } => generate(&name, &lang, single, fast),
+        Commands::Gen {
+            name,
+            lang,
+            single,
+            fast,
+        } => generate(&name, &lang, single, fast),
         Commands::List => list_templates(),
         Commands::Eg { name, count } => create_samples(&name, count),
-        Commands::Test { name, num } => test_solution(&name, num),
+        Commands::Test { name, num, lang } => test_solution(&name, num, &lang),
         Commands::Login => login(),
         Commands::Pull { name, ac } => pull(name, ac),
         Commands::Submit { name } => submit(&name),

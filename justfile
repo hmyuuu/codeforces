@@ -9,8 +9,8 @@ build:
     cargo build --manifest-path cf/Cargo.toml --release
 
 # Generate a new solution
-gen name lang="py":
-    just cf gen {{name}} -l {{lang}}
+gen name lang="py" *args:
+    just cf gen {{name}} -l {{lang}} {{args}}
 
 # Create sample I/O files (opens browser)
 eg name count="1":
@@ -21,8 +21,8 @@ list:
     just cf list
 
 # Test solution against samples
-test name *args:
-    just cf test {{name}} {{args}}
+test name lang="py" *args:
+    just cf test {{name}} -l {{lang}} {{args}}
 
 # Login to Codeforces
 login:
