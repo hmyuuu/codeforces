@@ -1,6 +1,6 @@
 # Codeforces Solutions
 
-A repository storing solutions to competitive programming problems on Codeforces.
+A repository storing my solutions to competitive programming problems on Codeforces.
 
 ## Usage
 
@@ -8,8 +8,6 @@ A repository storing solutions to competitive programming problems on Codeforces
 # Using justfile (no install needed)
 just gen 1900A           # Python (default)
 just gen 1900A -l cpp    # C++
-just gen 1900A -s        # Single test case template
-just gen 1900A -f        # Fast I/O template
 
 just eg 1900A            # Create sample I/O files
 just test 1900A          # Test solution against samples
@@ -27,7 +25,7 @@ just list                # List templates and solution counts
 
 ```bash
 just gen 1900A           # Generate solution file
-just parse 1900A         # Create sample files
+just eg 1900A         # Create sample files
 # Copy I/O from to samples/1900A/in1.txt and ans1.txt
 just test 1900A          # Run tests
 just submit 1900A        # Open browser to submit
