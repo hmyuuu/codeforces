@@ -1,0 +1,61 @@
+.claude/
+.cursor/
+.codex/
+.mise.toml
+# Compiled source #
+**/*.com
+**/*.class
+**/*.dll
+**/*.exe
+**/*.o
+**/*.so
+**/*.out
+
+# Python #
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+**/.eggs/
+**/.env
+**/.venv
+**/ENV/
+**/env/
+**/venv/
+
+# Rust #
+**/target/
+**/Cargo.lock
+
+# VSCode #
+**/.vscode/
+**/.history/
+**/*.code-workspace
+
+# JetBrains #
+**/.idea/
+**/*.iml
+
+# macOS #
+**/.DS_Store
+
+# Temporary files #
+**/*.swp
+**/*.swo
+**/*~
+# backup files #
+**/*.bak
+
+# Logs #
+**/*.log
+
+# Build artifacts #
+**/build/
+**/dist/
+
+# Node #
+**/node_modules/
+
+
