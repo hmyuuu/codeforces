@@ -1,5 +1,8 @@
 __author__ = 'ius'
 
+from sys import stdin
+input = stdin.readline
+
 """
 4A. Watermelon
 

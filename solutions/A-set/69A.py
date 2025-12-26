@@ -1,5 +1,8 @@
 __author__ = 'ius'
 
+from sys import stdin
+input = stdin.readline
+
 """
 69A. Young Physicist
 
@@ -11,9 +14,6 @@ The first line contains a single integer n (1 <= n <= 100) - the number of force
 Output:
 Print "YES" if the forces are in equilibrium, otherwise print "NO".
 """
-
-from sys import stdin
-input = stdin.readline
 
 n = int(input().strip())
 x = 0
